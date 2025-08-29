@@ -32,6 +32,7 @@ build-all:
 .PHONY: clean
 clean:
 #	rm -rf archive $(ARCHIVE_TMP)
+	$(RM) *.tar
 	$(RM) $(PKG_DESCS_MK)
 	$(RM) packages/*/*-autoloads.el
 	$(RM) packages/*/*-pkg.el
@@ -289,3 +290,43 @@ PACKAGES_LOG=$(foreach package,$(PACKAGES),packages/$(package)/$(package).log)
 
 check: $(PACKAGES_TESTS)
 	$(EMACS) -l ert -f ert-summarize-tests-batch-and-exit $(PACKAGES_LOG)
+
+MY_GNU     = transient
+MY_NONGNU  = cond-let
+MY_NONGNU += emacsql
+MY_NONGNU += git-modes
+MY_NONGNU += keycast
+MY_NONGNU += llama
+MY_NONGNU += magit
+MY_NONGNU += magit-section
+MY_NONGNU += orgit
+MY_NONGNU += with-editor
+
+checkout-my-gnu:
+	@for pkg in $(MY_GNU); do \
+	make packages/$$pkg; \
+	done
+
+checkout-my-nongnu:
+	@for pkg in $(filter-out magit-section,$(MY_NONGNU)); do \
+	make packages/$$pkg; \
+	done
+
+fetch-my-gnu:
+	@for pkg in $(MY_GNU); do \
+	cd packages/$$pkg; \
+	git pull --no-tags --ff-only ~/.config/emacs/lib/$$pkg main:elpa/$$pkg ); \
+	done
+
+fetch-my-nongnu:
+	@for pkg in $(filter-out magit-section,$(MY_NONGNU)); do ( \
+	cd packages/$$pkg; \
+	git pull --no-tags --ff-only ~/.config/emacs/lib/$$pkg main:elpa/$$pkg ); \
+	done
+
+build-my-gnu: $(addsuffix .tar,$(MY_GNU))
+	@for tar in $^; do echo; tar -tf $$tar | sort; done
+
+build-my-nongnu: $(addsuffix .tar,$(MY_NONGNU))
+	@for tar in $^; do echo; tar -tf $$tar | sort; done
+
