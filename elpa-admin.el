@@ -79,13 +79,7 @@
 
 (defvar elpaa--sandbox-extra-ro-dirs nil)
 
-(defvar elpaa--sandbox
-  ;; Currently sandboxing is implemented using `bwrap' which AFAIK doesn't
-  ;; exist for w32 nor for macos, so there's no point defaulting to non-nil
-  ;; on those platforms.
-  ;; On GNU/linux we do default to non-nil regardless if we find `bwrap' in
-  ;; $PATH just out of paranoia (in case `bwrap' ends up missing by accident).
-  (not (memq system-type '(darwin ms-dos windows-nt cygwin)))
+(defvar elpaa--sandbox nil
   "If non-nil, run some of the less trusted commands in a sandbox.
 This is recommended when building packages from untrusted sources,
 but this requires Bubblewrap (https://github.com/containers/bubblewrap)
