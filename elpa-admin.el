@@ -649,8 +649,11 @@ returns.  Return the selected revision."
           (when (string-match "\\.\\(tar\\|el\\)\\'" file)
             ;; Make sure we don't delete the file we just created.
             (cl-assert (not (equal file (file-name-nondirectory tarball))))
-            (if (file-readable-p (concat file ".lz"))
-                (progn (push oldtarball deleted) (delete-file file))
+            (if (file-readable-p (expand-file-name (concat file ".lz") destdir))
+                (progn (push oldtarball deleted)
+                       (elpaa--message "Deleting non-compressed tarball: %s"
+                                       file)
+                       (delete-file (expand-file-name file destdir)))
               ;; FIXME: This should never happen.
               (message "!!Tarball without matching compressed file: %s" file)
               (elpaa--call nil "lzip" (expand-file-name file destdir))
