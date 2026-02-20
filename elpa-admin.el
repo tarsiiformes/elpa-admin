@@ -641,7 +641,21 @@ returns.  Return the selected revision."
                 (make-directory olddir t)
                 (funcall mvfun filename)
                 (funcall mvfun sig)))))
-        (setq oldtarballs keep))))
+        (setq oldtarballs keep)))
+    (let ((deleted nil))
+      (dolist (oldtarball oldtarballs)
+        ;; Delete old non-compressed tarballs.
+        (let ((file (cdr oldtarball)))
+          (when (string-match "\\.\\(tar\\|el\\)\\'" file)
+            ;; Make sure we don't delete the file we just created.
+            (cl-assert (not (equal file (file-name-nondirectory tarball))))
+            (if (file-readable-p (concat file ".lz"))
+                (progn (push oldtarball deleted) (delete-file file))
+              ;; FIXME: This should never happen.
+              (message "!!Tarball without matching compressed file: %s" file)
+              (elpaa--call nil "lzip" (expand-file-name file destdir))
+              (setf (cdr oldtarball) (concat file ".lz"))))))
+      (setq oldtarballs (cl-set-difference oldtarballs deleted))))
   oldtarballs)
 
 (defun elpaa--report-failure ( pkg-spec metadata txt basename destdir
