@@ -602,7 +602,27 @@ returns.  Return the selected revision."
   (let ((self (rassoc (file-name-nondirectory tarball) oldtarballs)))
     (when self
       (setq oldtarballs (delq self oldtarballs))))
-  (with-demoted-errors "elpaa--prune-old-tarballs: %S"
+  ;; First make sure the old tarballs are all compressed and remove any
+  ;; left-over duplicates (i.e. compressed + non-compressed of the same).
+  (with-demoted-errors "elpaa--prune-old-tarballs-1: %S"
+    (let ((deleted nil))
+      (dolist (oldtarball oldtarballs)
+        ;; Delete old non-compressed tarballs.
+        (let ((file (cdr oldtarball)))
+          (when (string-match "\\.\\(tar\\|el\\)\\'" file)
+            ;; Make sure we don't delete the file we just created.
+            (cl-assert (not (equal file (file-name-nondirectory tarball))))
+            (if (file-readable-p (expand-file-name (concat file ".lz") destdir))
+                (progn (push oldtarball deleted)
+                       (message "Deleting non-compressed tarball: %s" file)
+                       (delete-file (expand-file-name file destdir)))
+              ;; FIXME: This should never happen.
+              (message "!!Tarball without matching compressed file: %s" file)
+              (elpaa--call nil "lzip" (expand-file-name file destdir))
+              (setf (cdr oldtarball) (concat file ".lz"))))))
+      (setq oldtarballs (cl-set-difference oldtarballs deleted))))
+  ;; Then use a heuristic to decide which versions are worthy.
+  (with-demoted-errors "elpaa--prune-old-tarballs-2: %S"
     (when (nthcdr elpaa--keep-max oldtarballs)
       (let* ((keep (elpaa--keep-old oldtarballs elpaa--keep-max))
              (keep (nreverse (sort keep
@@ -641,24 +661,7 @@ returns.  Return the selected revision."
                 (make-directory olddir t)
                 (funcall mvfun filename)
                 (funcall mvfun sig)))))
-        (setq oldtarballs keep)))
-    (let ((deleted nil))
-      (dolist (oldtarball oldtarballs)
-        ;; Delete old non-compressed tarballs.
-        (let ((file (cdr oldtarball)))
-          (when (string-match "\\.\\(tar\\|el\\)\\'" file)
-            ;; Make sure we don't delete the file we just created.
-            (cl-assert (not (equal file (file-name-nondirectory tarball))))
-            (if (file-readable-p (expand-file-name (concat file ".lz") destdir))
-                (progn (push oldtarball deleted)
-                       (elpaa--message "Deleting non-compressed tarball: %s"
-                                       file)
-                       (delete-file (expand-file-name file destdir)))
-              ;; FIXME: This should never happen.
-              (message "!!Tarball without matching compressed file: %s" file)
-              (elpaa--call nil "lzip" (expand-file-name file destdir))
-              (setf (cdr oldtarball) (concat file ".lz"))))))
-      (setq oldtarballs (cl-set-difference oldtarballs deleted))))
+        (setq oldtarballs keep))))
   oldtarballs)
 
 (defun elpaa--report-failure ( pkg-spec metadata txt basename destdir
