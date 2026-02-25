@@ -1078,7 +1078,7 @@ SPECS is the list of package specifications."
   '(:auto-sync :branch :core :doc :excludes :ignored-files
     :lisp-dir :maintainer :make :manual-sync :merge :news ;;  :main-file
     :readme :release :release-branch :renames :rolling-release
-    :shell-command :url :version-map
+    :shell-command :url :version-map :pdf
     ;; Internal use only.
     :parent--package)
   "List of keywords that can appear in a spec.")
@@ -1398,6 +1398,11 @@ PROGRAM, DESTINATION, ARGS is like in `elpaa--call'."
     (elpaa--message "call-sandboxed %S" args)
     (let ((dd (expand-file-name default-directory))) ;No `~' allowed!
       (setq args (nconc `("--bind" ,dd ,dd) args)))
+    (when (file-directory-p "/var/lib/texmf")
+      ;; Hack for LaTeX.
+      (setq args (append '("--overlay-src" "/var/lib/texmf"
+                           "--tmp-overlay" "/var/lib/texmf")
+                         args)))
     ;; Add read-only dirs in reverse order.
     (dolist (b (append elpaa--sandbox-ro-binds
                        elpaa--sandbox-extra-ro-dirs))
@@ -2914,12 +2919,12 @@ directory; one of archive, archive-devel."
     ;; the empty temp dir ends up in the tarball (bug#80217).
     (delete-directory tmpdir 'recursive)))
 
-(defun elpaa--html-build-doc (pkg-spec docfile html-dir)
-  (setq html-dir (directory-file-name html-dir))
+(defun elpaa--html-build-doc (pkg-spec docfile doc-dir)
+  (setq doc-dir (directory-file-name doc-dir))
   (let* ((destname (elpaa--doc-html-file docfile))
-	 (html-file (expand-file-name destname html-dir))
+	 (html-file (expand-file-name destname doc-dir))
 	 (html-xref-file
-	  (expand-file-name destname (file-name-directory html-dir))))
+	  (expand-file-name destname (file-name-directory doc-dir))))
     (elpaa--makeinfo docfile html-file
                      (list "--html" (format "--css-ref=%s" elpaa--css-url)))
     (elpaa--doc-html-adjust-auxfiles pkg-spec docfile html-file
@@ -2930,7 +2935,7 @@ directory; one of archive, archive-devel."
 
     ;; Create a symlink from elpa/archive[-devel]/doc/* to
     ;; the actual file, so html references work.
-    (let ((target (file-name-concat (file-name-nondirectory html-dir)
+    (let ((target (file-name-concat (file-name-nondirectory doc-dir)
                                     destname))
           (current-target (file-attribute-type
                            (file-attributes html-xref-file))))
@@ -2941,6 +2946,16 @@ directory; one of archive, archive-devel."
        ((equal target current-target) nil) ;Nothing to do.
        (t (error "Manual name %S conflicts with %S"
                  destname current-target))))))
+
+(defun elpaa--pdf-build-doc (pkg-spec docfile doc-dir)
+  (let* ((destname (concat (file-name-base docfile) ".pdf"))
+	 (pdf-file (expand-file-name destname doc-dir)))
+    (elpaa--makeinfo docfile pdf-file (list "--pdf"))
+    (push (cons "(pdf)"
+                (file-relative-name pdf-file
+                                    (file-name-directory
+                                     (directory-file-name doc-dir))))
+          (plist-get (cdr pkg-spec) :internal--html-docs))))
 
 (defun elpaa--doc-html-adjust-auxfiles (pkg-spec docfile html-file offset)
   ;; (let* ((auxfiles (elpaa--spec-get pkg-spec :doc-files)))
@@ -2987,10 +3002,10 @@ directory; one of archive, archive-devel."
         (let ((make-backup-files nil))
           (save-buffer))))))
 
-(defun elpaa--build-Info-1 (pkg-spec docfile dir html-dir)
+(defun elpaa--build-Info-1 (pkg-spec docfile dir doc-dir)
   "Build an info file from DOCFILE (a texinfo source file).
-DIR must be the package source directory.  If HTML-DIR is
-non-nil, also build html files, store them there.  HTML-DIR is
+DIR must be the package source directory.  If DOC-DIR is
+non-nil, also build html files, store them there.  DOC-DIR is
 relative to elpa root."
   (let* ((elpaa--sandbox-ro-binds
           (cons default-directory elpaa--sandbox-ro-binds))
@@ -3027,7 +3042,10 @@ relative to elpa root."
         (elpaa--temp-file info-file)
         (elpaa--makeinfo docfile info-file)
 
-	(when html-dir (elpaa--html-build-doc pkg-spec docfile html-dir))
+	(when doc-dir
+	  (elpaa--html-build-doc pkg-spec docfile doc-dir)
+	  (when (elpaa--spec-get pkg-spec :pdf)
+	    (elpaa--pdf-build-doc pkg-spec docfile doc-dir)))
 
         (setq docfile info-file)))
 
